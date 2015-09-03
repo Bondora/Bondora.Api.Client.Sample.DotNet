@@ -102,12 +102,12 @@ namespace Bondora.Api.Client.Sample.DotNet
                 var loginResult = JsonConvert.DeserializeObject<ApiResultAuthentication>(loginResponse.Content.ReadAsStringAsync().Result);
                 Console.WriteLine("Token:" + loginResult.Payload.Token);
                 Console.WriteLine("Valid Until:" + loginResult.Payload.ValidUntil);
-                if (loginResult.Payload.RepresentedParties.Count > 0)
+                if (loginResult.Payload.UserOrganizations.Count > 0)
                 {
-                    Console.WriteLine("Represented Parties:\n");
-                    foreach (var party in loginResult.Payload.RepresentedParties)
+                    Console.WriteLine("Represented Organizations:\n");
+                    foreach (var party in loginResult.Payload.UserOrganizations)
                     {
-                        Console.WriteLine("PartyId={0}, Name={1}, IsReadonly={2}, ActiveToDate={3}", party.Id, party.Name, party.IsReadonly, party.ActiveToDate);
+                        Console.WriteLine("OrganizationId={0}, Name={1}, IsReadonly={2}, ActiveToDate={3}", party.Id, party.Name, party.IsReadonly, party.ActiveToDate);
                     }
                 }
                 return loginResult.Payload.Token;

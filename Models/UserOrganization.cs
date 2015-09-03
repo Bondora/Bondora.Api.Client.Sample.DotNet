@@ -6,15 +6,18 @@ using System.Threading.Tasks;
 
 namespace Bondora.Api.Client.Sample.DotNet.Models
 {
-    public class RepresentedParty
+    /// <summary>
+    /// Represented Organization for User
+    /// </summary>
+    public class UserOrganization
     {
         /// <summary>
-        /// Party Id
+        /// Organization Id
         /// </summary>
         public Guid Id { get; set; }
 
         /// <summary>
-        /// Party (Organization) name
+        /// Organization name
         /// </summary>
         public string Name { get; set; }
 

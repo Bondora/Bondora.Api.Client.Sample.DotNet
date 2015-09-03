@@ -20,6 +20,9 @@ namespace Bondora.Api.Client.Sample.DotNet.Models
         T Payload { get; set; }
     }
 
+    /// <summary>
+    /// Result of the API request
+    /// </summary>
     public class ApiResult : IApiResult
     {
         /// <summary>
@@ -28,6 +31,11 @@ namespace Bondora.Api.Client.Sample.DotNet.Models
         /// </summary>
         [DefaultValue(true)]
         public bool Success { get; set; }
+
+        /// <summary>
+        /// Error(s) accociated with the API request.
+        /// </summary>   
+        public List<ApiError> Errors { get; set; }
     }
 
     public class ApiResult<T> : ApiResult, IApiResult<T> where T : class

@@ -50,6 +50,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Models\ApiError.cs" />
     <Compile Include="Models\ApiResult.cs" />
     <Compile Include="Models\ApiResultAuction.cs" />
     <Compile Include="Models\ApiResultAuctions.cs" />
@@ -61,7 +62,7 @@
     <Compile Include="Models\BidSummary.cs" />
     <Compile Include="Models\Enums\ApiBidFailureReason.cs" />
     <Compile Include="Models\Enums\ApiBidStatusCode.cs" />
-    <Compile Include="Models\RepresentedParty.cs" />
+    <Compile Include="Models\UserOrganization.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

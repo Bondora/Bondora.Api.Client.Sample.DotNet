@@ -6,9 +6,13 @@ using System.Threading.Tasks;
 
 namespace Bondora.Api.Client.Sample.DotNet.Models
 {
+    /// <summary>
+    /// Authorization result
+    /// </summary>
     public class ApiResultAuthentication : ApiResult<AuthTokenResult>
     {
     }
+
     /// <summary>
     /// Authorization token result
     /// </summary>
@@ -25,8 +29,8 @@ namespace Bondora.Api.Client.Sample.DotNet.Models
         public DateTime ValidUntil { get; set; }
 
         /// <summary>
-        /// List of User's represented parties (Organizations)
+        /// List of User's represented Organization(s)
         /// </summary>
-        public List<RepresentedParty> RepresentedParties { get; set; }
+        public List<UserOrganization> UserOrganizations { get; set; }
     }
 }

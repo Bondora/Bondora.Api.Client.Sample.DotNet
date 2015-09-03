@@ -6,14 +6,17 @@ using System.Threading.Tasks;
 
 namespace Bondora.Api.Client.Sample.DotNet.Models
 {
+    /// <summary>
+    /// Bids to make for the user or user represented organization.
+    /// </summary>
     public class BidRequest
     {
         /// <summary>
-        /// Party to make bid for. 
-        /// Specify this if the PartyId is for the represented Organization.
-        /// No need to specify if the bid is made for current user party.
+        /// Organization to make bid for. 
+        /// Specify this if the Bid is made in behalf of the Organization.
+        /// No need to specify if the bid is made for current user.
         /// </summary>
-        public Guid? PartyId { get; set; }
+        public Guid? OrganizationId { get; set; }
 
         /// <summary>
         /// The bids to make.
@@ -24,10 +27,10 @@ namespace Bondora.Api.Client.Sample.DotNet.Models
         {
         }
 
-        public BidRequest(List<Bid> bids, Guid? partyId = null)
+        public BidRequest(List<Bid> bids, Guid? organizationId = null)
         {
             Bids = bids;
-            PartyId = partyId;
+            OrganizationId = organizationId;
         }
 
     }
