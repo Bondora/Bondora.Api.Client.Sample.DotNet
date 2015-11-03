@@ -5,19 +5,16 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
-using System.Text;
 using System.Threading.Tasks;
 using Bondora.Api.Client.Sample.DotNet.Models;
 using Bondora.Api.Client.Sample.DotNet.Models.Enums;
-using Newtonsoft.Json;
 
 namespace Bondora.Api.Client.Sample.DotNet
 {
     class Program
     {
-        private const string ApiUsername = "apitestuser@bondora.com"; // Change to your Bondora username
-        private const string ApiPassword = "ap1t3stpa$$w0rd"; // Change to your Bondora password
-        private const string ApiBaseUri = "https://api-sandbox.bondora.com/"; // Base Uri for the API
+        private const string ApiBaseUri = "http://localhost:57390/"; // Base Uri for the API
+        private const string ApiAccessToken = "koUqKoRAF7aMUB4jLvSIgWbSAVDpXO24XckdcNF7dvvMHNoz"; // OAuth Access Token
 
         static void Main(string[] args)
         {
@@ -28,15 +25,20 @@ namespace Bondora.Api.Client.Sample.DotNet
         {
             try
             {
-                //get token for login
-                var token = await LoginToApi();
-
-                // If no token is received, cannot continue
-                if (string.IsNullOrEmpty(token))
+                // If no accessToken is received, cannot continue
+                if (string.IsNullOrEmpty(ApiAccessToken))
+                {
+                    Console.WriteLine("No Access Token set. Cannot continue! \n");
                     return;
+                }
 
                 // Get list auctions
-                var auctions = await ListAuctions(token);
+                var auctions = await GetAuctions();
+
+                foreach (Auction auction in auctions)
+                {
+                    Console.WriteLine("AuctionId={0}, Amount={1}, Rating={2}", auction.AuctionId, auction.AppliedAmount, auction.Rating);
+                }
 
                 // Check if there are any active auctions
                 if (auctions.Count > 0)
@@ -44,19 +46,19 @@ namespace Bondora.Api.Client.Sample.DotNet
                     // Get first auction for bidding
                     int auctionIndex = new Random().Next(auctions.Count);
                     Guid auctionId = auctions[auctionIndex].AuctionId;
-                    var auction = await GetAuction(token, auctionId);
+                    var auction = await GetAuction(auctionId);
 
                     // Construct 2 bid requests for this auction
                     var bids = new List<Bid> { new Bid(auction.AuctionId, 100M), new Bid(auction.AuctionId, 200M, 100M) };
                     var bidRequest = new BidRequest(bids);
 
                     // send the bid request
-                    if (await BidOnAuction(token, bidRequest))
+                    if (await BidOnAuction(bidRequest))
                         Console.WriteLine("Bid Request Succeeded! \n");
                 }
 
                 // Get list of pending API bids (bid status = 0 as example)
-                var bidList = await ListBids(token, (int)ApiBidStatusCode.Pending);
+                var bidList = await GetBids((int)ApiBidStatusCode.Pending);
 
                 if (bidList.Count > 0)
                 {
@@ -71,9 +73,13 @@ namespace Bondora.Api.Client.Sample.DotNet
                     Console.WriteLine("\nNo bids found.\n");
                 }
 
-                // Logout from API
-                if (await LogoutFromApi(token))
-                    Console.WriteLine("\nLogged out from API!\n");
+                // Get Investments
+                var investments = await GetInvestments();
+
+                foreach (Investment investment in investments)
+                {
+                    Console.WriteLine("LoanId={0}, LoanPartId={1}, Amount={2}, Interest={3}", investment.LoanId, investment.LoanPartId, investment.Amount, investment.Interest);
+                }
             }
             catch (Exception ex)
             {
@@ -85,55 +91,22 @@ namespace Bondora.Api.Client.Sample.DotNet
             System.Console.ReadLine();
         }
 
-        #region Login
-        static async Task<string> LoginToApi()
+        #region Auctions
+        static async Task<IList<Auction>> GetAuctions()
         {
-            using (var client = InitializeHttpClientWithCredentials())
+            using (var client = InitializeHttpClientWithAccessToken(ApiAccessToken))
             {
-                var content = new StringContent(string.Empty);
-                var loginResponse = await client.PostAsync("api/v1/login", content);
-
-                if (loginResponse.StatusCode != HttpStatusCode.OK)
-                {
-                    throw new Exception("Login failed, Reason : " + loginResponse.Content.ReadAsStringAsync().Result);
-                }
-
-                Console.WriteLine("Login Succeeded! Below is your token information:\n");
-                var loginResult = JsonConvert.DeserializeObject<ApiResultAuthentication>(loginResponse.Content.ReadAsStringAsync().Result);
-                Console.WriteLine("Token:" + loginResult.Payload.Token);
-                Console.WriteLine("Valid Until:" + loginResult.Payload.ValidUntil);
-                if (loginResult.Payload.UserOrganizations.Count > 0)
-                {
-                    Console.WriteLine("Represented Organizations:\n");
-                    foreach (var party in loginResult.Payload.UserOrganizations)
-                    {
-                        Console.WriteLine("OrganizationId={0}, Name={1}, IsReadonly={2}, ActiveToDate={3}", party.Id, party.Name, party.IsReadonly, party.ActiveToDate);
-                    }
-                }
-                return loginResult.Payload.Token;
-            }
-        }
-        #endregion
-
-        #region ListAuctions
-        static async Task<IList<Auction>> ListAuctions(string token)
-        {
-            using (var client = InitializeHttpClientWithToken(token))
-            {
-                var auctionListResponse = await client.GetAsync("api/v1/auctions");
+                HttpResponseMessage auctionListResponse = await client.GetAsync("api/v1/auctions");
                 if (auctionListResponse.IsSuccessStatusCode)
                 {
                     Console.WriteLine("\n\nFound Auctions For Bidding: \n");
-                    var listAuctionResult = JsonConvert.DeserializeObject<ApiResultAuctions>(auctionListResponse.Content.ReadAsStringAsync().Result);
-                    foreach (var auction in listAuctionResult.Payload)
-                    {
-                        Console.WriteLine("AuctionId={0}, Amount={1}, Rating={2}", auction.AuctionId, auction.AppliedAmount, auction.Rating);
-                    }
+                    var listAuctionResult = await auctionListResponse.Content.ReadAsAsync<ApiResultAuctions>();
+                    
                     return listAuctionResult.Payload;
                 }
                 else
                 {
-                    throw new Exception("Getting list of auctions failed, Reason : " + auctionListResponse.Content.ReadAsStringAsync().Result);
+                    throw new Exception("Getting list of auctions failed, Reason : " + await auctionListResponse.Content.ReadAsStringAsync());
                 }
             }
             return null;
@@ -141,22 +114,22 @@ namespace Bondora.Api.Client.Sample.DotNet
         #endregion
 
         #region GetAuction
-        static async Task<Auction> GetAuction(string token, Guid auctionId)
+        static async Task<Auction> GetAuction(Guid auctionId)
         {
             var auctionFound = new Auction();
-            using (var client = InitializeHttpClientWithToken(token))
+            using (var client = InitializeHttpClientWithAccessToken(ApiAccessToken))
             {
-                var auctionListResponse = await client.GetAsync("api/v1/auction/" + auctionId);
+                HttpResponseMessage auctionListResponse = await client.GetAsync("api/v1/auction/" + auctionId);
                 if (auctionListResponse.IsSuccessStatusCode)
                 {
                     Console.WriteLine("\n\nAuction chosen: \n");
-                    var listAuctionResult = JsonConvert.DeserializeObject<ApiResultAuction>(auctionListResponse.Content.ReadAsStringAsync().Result);
+                    var listAuctionResult = await auctionListResponse.Content.ReadAsAsync<ApiResultAuction>();
                     auctionFound = listAuctionResult.Payload;
                     Console.WriteLine("AuctionId={0}, Amount={1}, Rating={2}", auctionFound.AuctionId, auctionFound.AppliedAmount, auctionFound.Rating);
                 }
                 else
                 {
-                    throw new Exception("Getting auction failed, Reason : " + auctionListResponse.Content.ReadAsStringAsync().Result);
+                    throw new Exception("Getting auction failed, Reason : " + await auctionListResponse.Content.ReadAsStringAsync());
                 }
                 return auctionFound;
             }
@@ -164,28 +137,26 @@ namespace Bondora.Api.Client.Sample.DotNet
         #endregion
 
         #region Bid On Auction
-        static async Task<bool> BidOnAuction(string token, BidRequest bidRequest)
+        static async Task<bool> BidOnAuction(BidRequest bidRequest)
         {
-            using (var client = InitializeHttpClientWithToken(token))
+            using (var client = InitializeHttpClientWithAccessToken(ApiAccessToken))
             {
-                var content = new StringContent(JsonConvert.SerializeObject(bidRequest), Encoding.UTF8,
-                    "application/json");
-                var bidResponse = await client.PostAsync("api/v1/bid", content);
+                HttpResponseMessage bidResponse = await client.PostAsJsonAsync("api/v1/bid", bidRequest);
                 if (bidResponse.StatusCode != HttpStatusCode.Accepted)
                 {
-                    throw new Exception("Bid Request failed, Reason : " + bidResponse.Content.ReadAsStringAsync().Result);
+                    throw new Exception("Bid Request failed, Reason : " + await bidResponse.Content.ReadAsStringAsync());
                 }
                 return true;
             }
         }
         #endregion
 
-        #region List Bids
-        static async Task<IList<BidSummary>> ListBids(string token, int? bidStatus = null, DateTime? startDate = null, DateTime? endDate = null, Guid? partyId = null)
+        #region Bids
+        static async Task<IList<BidSummary>> GetBids(int? bidStatus = null, DateTime? startDate = null, DateTime? endDate = null, Guid? partyId = null)
         {
             var listBidResult = new ApiResultBids();
 
-            using (var client = InitializeHttpClientWithToken(token))
+            using (var client = InitializeHttpClientWithAccessToken(ApiAccessToken))
             {
                 // Add GET parameters
                 var getParams = new NameValueCollection();
@@ -198,35 +169,40 @@ namespace Bondora.Api.Client.Sample.DotNet
                 if (partyId.HasValue)
                     getParams.Add("partyId", partyId.Value.ToString());
 
-                var bidListResponse = await client.GetAsync("api/v1/bids?" + GetQueryString(getParams));
+                HttpResponseMessage bidListResponse = await client.GetAsync("api/v1/bids?" + GetQueryString(getParams));
 
                 if (bidListResponse.IsSuccessStatusCode)
                 {
-                    listBidResult = JsonConvert.DeserializeObject<ApiResultBids>(bidListResponse.Content.ReadAsStringAsync().Result);
+                    listBidResult = await bidListResponse.Content.ReadAsAsync<ApiResultBids>();
                 }
                 else
                 {
-                    throw new Exception("Getting list of bids failed, Reason : " + bidListResponse.Content.ReadAsStringAsync().Result);
+                    throw new Exception("Getting list of bids failed, Reason : " + await bidListResponse.Content.ReadAsStringAsync());
                 }
                 return listBidResult.Payload;
             }
         }
         #endregion
 
-        #region Logout
-        static async Task<bool> LogoutFromApi(string token)
+        #region Investments
+        static async Task<IList<Investment>> GetInvestments()
         {
-            using (var client = InitializeHttpClientWithToken(token))
+            using (var client = InitializeHttpClientWithAccessToken(ApiAccessToken))
             {
-                var content = new StringContent(string.Empty);
-                var logoutResponse = await client.PostAsync("api/v1/logout", content);
-
-                if (!logoutResponse.IsSuccessStatusCode)
+                HttpResponseMessage auctionListResponse = await client.GetAsync("api/v1/account/investments");
+                if (auctionListResponse.IsSuccessStatusCode)
                 {
-                    throw new Exception("Logout failed, Reason : " + logoutResponse.Content.ReadAsStringAsync().Result);
+                    Console.WriteLine("\n\nFound Investments: \n");
+                    var investmentsResult = await auctionListResponse.Content.ReadAsAsync<ApiResultInvestments>();
+                    
+                    return investmentsResult.Payload;
                 }
-                return true;
+                else
+                {
+                    throw new Exception("Getting list of investments failed, Reason : " + await auctionListResponse.Content.ReadAsStringAsync());
+                }
             }
+            return null;
         }
         #endregion
 
@@ -234,24 +210,17 @@ namespace Bondora.Api.Client.Sample.DotNet
 
         private static HttpClient InitializeHttpClientWithBaseUri()
         {
-            var client = new HttpClient {BaseAddress = new Uri(ApiBaseUri)};
+            var client = new HttpClient();
+            client.BaseAddress = new Uri(ApiBaseUri);
             client.DefaultRequestHeaders.Accept.Clear();
             client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             return client;
         }
 
-        private static HttpClient InitializeHttpClientWithCredentials()
+        static HttpClient InitializeHttpClientWithAccessToken(string accessToken)
         {
             var client = InitializeHttpClientWithBaseUri();
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(
-                Encoding.ASCII.GetBytes(string.Format("{0}:{1}", ApiUsername, ApiPassword))));
-            return client;
-        }
-
-        static HttpClient InitializeHttpClientWithToken(string token)
-        {
-            var client = InitializeHttpClientWithBaseUri();
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Token", token);
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
             return client;
         }
 
