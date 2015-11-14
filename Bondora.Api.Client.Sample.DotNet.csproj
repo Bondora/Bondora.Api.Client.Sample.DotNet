@@ -57,6 +57,7 @@
     <Compile Include="Models\ApiResultAuthentication.cs" />
     <Compile Include="Models\ApiResultBids.cs" />
     <Compile Include="Models\ApiResultInvestments.cs" />
+    <Compile Include="Models\ApiResultSecondMarket.cs" />
     <Compile Include="Models\Auction.cs" />
     <Compile Include="Models\Bid.cs" />
     <Compile Include="Models\BidRequest.cs" />
@@ -68,6 +69,7 @@
     <Compile Include="Models\Enums\LoanDebtManagementEventType.cs" />
     <Compile Include="Models\Enums\Sex.cs" />
     <Compile Include="Models\Investment.cs" />
+    <Compile Include="Models\SecondMarketItem.cs" />
     <Compile Include="Models\UserOrganization.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

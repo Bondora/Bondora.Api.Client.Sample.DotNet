@@ -13,8 +13,8 @@ namespace Bondora.Api.Client.Sample.DotNet
 {
     class Program
     {
-        private const string ApiBaseUri = "http://localhost:57390/"; // Base Uri for the API
-        private const string ApiAccessToken = "koUqKoRAF7aMUB4jLvSIgWbSAVDpXO24XckdcNF7dvvMHNoz"; // OAuth Access Token
+        private const string ApiBaseUri = "https://api-sandbox.bondora.com/"; // Base Uri for the API
+        private const string ApiAccessToken = ""; // OAuth Access Token
 
         static void Main(string[] args)
         {
@@ -35,9 +35,19 @@ namespace Bondora.Api.Client.Sample.DotNet
                 // Get list auctions
                 var auctions = await GetAuctions();
 
-                foreach (Auction auction in auctions)
+                if (auctions.Count > 0)
                 {
-                    Console.WriteLine("AuctionId={0}, Amount={1}, Rating={2}", auction.AuctionId, auction.AppliedAmount, auction.Rating);
+                    Console.WriteLine("\n\nFound Auctions: \n");
+
+                    foreach (Auction auction in auctions)
+                    {
+                        Console.WriteLine("AuctionId={0}, Amount={1}, Rating={2}", auction.AuctionId,
+                            auction.AppliedAmount, auction.Rating);
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("\nNo auctions found.\n");
                 }
 
                 // Check if there are any active auctions
@@ -56,16 +66,16 @@ namespace Bondora.Api.Client.Sample.DotNet
                     if (await BidOnAuction(bidRequest))
                         Console.WriteLine("Bid Request Succeeded! \n");
                 }
-
+                
                 // Get list of pending API bids (bid status = 0 as example)
-                var bidList = await GetBids((int)ApiBidStatusCode.Pending);
+                var bidList = await GetBids(10);
 
                 if (bidList.Count > 0)
                 {
                     Console.WriteLine("\nFound Bids:\n");
                     foreach (var bid in bidList)
                     {
-                        Console.WriteLine("AuctionId={0}, Amount={1}, Actual={2}, Status={3}", bid.AuctionId, bid.RequestedBidAmount, bid.ActualBidAmount, bid.Status);
+                        Console.WriteLine("Requested={0}, Amount={1}, Actual={2}, Status={3}", bid.BidRequestedDate, bid.RequestedBidAmount, bid.ActualBidAmount, bid.Status);
                     }
                 }
                 else
@@ -76,9 +86,37 @@ namespace Bondora.Api.Client.Sample.DotNet
                 // Get Investments
                 var investments = await GetInvestments();
 
-                foreach (Investment investment in investments)
+                if (investments.Count > 0)
                 {
-                    Console.WriteLine("LoanId={0}, LoanPartId={1}, Amount={2}, Interest={3}", investment.LoanId, investment.LoanPartId, investment.Amount, investment.Interest);
+                    Console.WriteLine("\n\nFound Investments: \n");
+
+                    foreach (Investment investment in investments)
+                    {
+                        Console.WriteLine("Amount={0}, Interest={1}, LateAmount={2}, UserName={3}",
+                            investment.Amount, investment.Interest, investment.LateAmountTotal, investment.UserName);
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("\nNo Investments found.\n");
+                }
+
+                // Get Investments
+                var secondMarketItems = await GetSecondMarketItems(10);
+
+                if (secondMarketItems.Count > 0)
+                {
+                    Console.WriteLine("\n\nFound secondary market items: \n");
+
+                    foreach (SecondMarketItem item in secondMarketItems)
+                    {
+                        Console.WriteLine("Amount={0}, Price={1}, XIRR={2}, LateAmount={3}",
+                            item.Amount, item.Price, item.Xirr, item.LateAmountTotal);
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("\nNo secondary market items found.\n");
                 }
             }
             catch (Exception ex)
@@ -92,14 +130,13 @@ namespace Bondora.Api.Client.Sample.DotNet
         }
 
         #region Auctions
-        static async Task<IList<Auction>> GetAuctions()
+        static async Task<IList<Auction>> GetAuctions(int pageSize = 10)
         {
             using (var client = InitializeHttpClientWithAccessToken(ApiAccessToken))
             {
-                HttpResponseMessage auctionListResponse = await client.GetAsync("api/v1/auctions");
+                HttpResponseMessage auctionListResponse = await client.GetAsync("api/v1/auctions?PageSize=" + pageSize);
                 if (auctionListResponse.IsSuccessStatusCode)
                 {
-                    Console.WriteLine("\n\nFound Auctions For Bidding: \n");
                     var listAuctionResult = await auctionListResponse.Content.ReadAsAsync<ApiResultAuctions>();
                     
                     return listAuctionResult.Payload;
@@ -152,7 +189,7 @@ namespace Bondora.Api.Client.Sample.DotNet
         #endregion
 
         #region Bids
-        static async Task<IList<BidSummary>> GetBids(int? bidStatus = null, DateTime? startDate = null, DateTime? endDate = null, Guid? partyId = null)
+        static async Task<IList<BidSummary>> GetBids(int pageSize = 10, int? bidStatus = null, DateTime? startDate = null, DateTime? endDate = null, Guid? partyId = null)
         {
             var listBidResult = new ApiResultBids();
 
@@ -169,7 +206,7 @@ namespace Bondora.Api.Client.Sample.DotNet
                 if (partyId.HasValue)
                     getParams.Add("partyId", partyId.Value.ToString());
 
-                HttpResponseMessage bidListResponse = await client.GetAsync("api/v1/bids?" + GetQueryString(getParams));
+                HttpResponseMessage bidListResponse = await client.GetAsync("api/v1/bids?PageSize=" + pageSize + "&" + GetQueryString(getParams));
 
                 if (bidListResponse.IsSuccessStatusCode)
                 {
@@ -185,14 +222,13 @@ namespace Bondora.Api.Client.Sample.DotNet
         #endregion
 
         #region Investments
-        static async Task<IList<Investment>> GetInvestments()
+        static async Task<IList<Investment>> GetInvestments(int pageSize = 10)
         {
             using (var client = InitializeHttpClientWithAccessToken(ApiAccessToken))
             {
-                HttpResponseMessage auctionListResponse = await client.GetAsync("api/v1/account/investments");
+                HttpResponseMessage auctionListResponse = await client.GetAsync("api/v1/account/investments?PageSize=" + pageSize);
                 if (auctionListResponse.IsSuccessStatusCode)
                 {
-                    Console.WriteLine("\n\nFound Investments: \n");
                     var investmentsResult = await auctionListResponse.Content.ReadAsAsync<ApiResultInvestments>();
                     
                     return investmentsResult.Payload;
@@ -200,6 +236,27 @@ namespace Bondora.Api.Client.Sample.DotNet
                 else
                 {
                     throw new Exception("Getting list of investments failed, Reason : " + await auctionListResponse.Content.ReadAsStringAsync());
+                }
+            }
+            return null;
+        }
+        #endregion
+
+        #region SeconadaryMarket
+        static async Task<IList<SecondMarketItem>> GetSecondMarketItems(int pageSize = 10)
+        {
+            using (var client = InitializeHttpClientWithAccessToken(ApiAccessToken))
+            {
+                HttpResponseMessage response = await client.GetAsync("api/v1/secondarymarket?PageSize=" + pageSize);
+                if (response.IsSuccessStatusCode)
+                {
+                    var result = await response.Content.ReadAsAsync<ApiResultSecondMarket>();
+
+                    return result.Payload;
+                }
+                else
+                {
+                    throw new Exception("Getting list of secondary market items failed, Reason : " + await response.Content.ReadAsStringAsync());
                 }
             }
             return null;
