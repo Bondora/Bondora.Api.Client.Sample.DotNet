@@ -11,6 +11,11 @@ namespace Bondora.Api.Client.Sample.DotNet.Models
     public class BidSummary
     {
         /// <summary>
+        /// Bid unique identifier
+        /// </summary>
+        public virtual Guid Id { get; set; }
+
+        /// <summary>
         /// Id of auction bidded
         /// </summary>
         public virtual Guid AuctionId { get; set; }
@@ -31,11 +36,6 @@ namespace Bondora.Api.Client.Sample.DotNet.Models
         public virtual decimal? RequestedBidMinimumLimit { get; set; }
 
         /// <summary>
-        /// status of bid
-        /// </summary>
-        public virtual ApiBidStatusCode Status { get; set; }
-
-        /// <summary>
         /// when bid is requested via API
         /// </summary>
         public virtual DateTime? BidRequestedDate { get; set; }
@@ -46,8 +46,19 @@ namespace Bondora.Api.Client.Sample.DotNet.Models
         public virtual DateTime? BidProcessedDate { get; set; }
 
         /// <summary>
+        /// Is request currently processed
+        /// </summary>
+        public virtual bool IsRequestBeingProcessed { get; set; }
+
+        /// <summary>
+        /// status of bid
+        /// </summary>
+        public virtual ApiBidStatusCode StatusCode { get; set; }
+
+        /// <summary>
         /// why bid failed
         /// </summary>
-        public virtual ApiBidFailureReason BidFailureReason { get; set; }
+        public virtual ApiBidFailureReason FailureReason { get; set; }
+
     }
 }

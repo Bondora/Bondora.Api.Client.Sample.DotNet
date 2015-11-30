@@ -1,123 +1,76 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Collections.Specialized;
 using System.Linq;
-using System.Net;
-using System.Net.Http;
-using System.Net.Http.Headers;
 using System.Threading.Tasks;
 using Bondora.Api.Client.Sample.DotNet.Models;
-using Bondora.Api.Client.Sample.DotNet.Models.Enums;
 
 namespace Bondora.Api.Client.Sample.DotNet
 {
     class Program
     {
-        private const string ApiBaseUri = "https://api-sandbox.bondora.com/"; // Base Uri for the API
-        private const string ApiAccessToken = ""; // OAuth Access Token
-
+        private static ApiClient apiClient;
+        
         static void Main(string[] args)
         {
+            apiClient = new ApiClient(ApiConfig.ApiBaseUri);
+
             RunAsync().Wait();
+        }
+
+        static async Task<bool> Authorize()
+        {
+            Console.WriteLine("Do you want to use OAuth authorization?");
+            Console.WriteLine("Insert [Y] to use and just press [Enter] for none.");
+            
+            string answer = Console.ReadLine();
+            if (string.IsNullOrWhiteSpace(answer) || 
+                !string.Equals(answer, "y", StringComparison.InvariantCultureIgnoreCase))
+            {
+                Console.WriteLine("Skipping Authorization Flow.");
+                return true;
+            }
+
+            var scopes = string.Join("%20", ApiConfig.OAuthScopes.Split(','));
+            string authUri = string.Format("{0}?client_id={1}&scope={2}&response_type=code&redirect_uri={3}",
+                ApiConfig.OAuthAuthorizeUri, ApiConfig.ClientId, scopes, ApiConfig.RedirectUri);
+
+            // Open the default Brower with Uri
+            System.Diagnostics.Process.Start(authUri);
+
+            Console.WriteLine("Copy the received Uri from the Authorization Flow.");
+            Console.WriteLine("Insert the received {code} value and press [Enter]:");
+
+            string code = Console.ReadLine();
+
+            if (string.IsNullOrEmpty(code))
+            {
+                Console.WriteLine("No input was given. Cannot continue with OAuth authorization.");
+                return false;
+            }
+
+            string accessToken = await apiClient.GetAccessToken(code, ApiConfig.ClientId, ApiConfig.ClientSecret, ApiConfig.RedirectUri);
+            if (string.IsNullOrEmpty(accessToken))
+            {
+                Console.WriteLine("Getting the Access Token failed.");
+                return false;
+            }
+            else
+            {
+                Console.WriteLine("Received Access Token: {0}", accessToken);
+            }
+
+            apiClient.AccessToken = accessToken;
+
+            return true;
         }
 
         static async Task RunAsync()
         {
             try
             {
-                // If no accessToken is received, cannot continue
-                if (string.IsNullOrEmpty(ApiAccessToken))
-                {
-                    Console.WriteLine("No Access Token set. Cannot continue! \n");
-                    return;
-                }
-
-                // Get list auctions
-                var auctions = await GetAuctions();
-
-                if (auctions.Count > 0)
-                {
-                    Console.WriteLine("\n\nFound Auctions: \n");
-
-                    foreach (Auction auction in auctions)
-                    {
-                        Console.WriteLine("AuctionId={0}, Amount={1}, Rating={2}", auction.AuctionId,
-                            auction.AppliedAmount, auction.Rating);
-                    }
-                }
-                else
-                {
-                    Console.WriteLine("\nNo auctions found.\n");
-                }
-
-                // Check if there are any active auctions
-                if (auctions.Count > 0)
-                {
-                    // Get first auction for bidding
-                    int auctionIndex = new Random().Next(auctions.Count);
-                    Guid auctionId = auctions[auctionIndex].AuctionId;
-                    var auction = await GetAuction(auctionId);
-
-                    // Construct 2 bid requests for this auction
-                    var bids = new List<Bid> { new Bid(auction.AuctionId, 100M), new Bid(auction.AuctionId, 200M, 100M) };
-                    var bidRequest = new BidRequest(bids);
-
-                    // send the bid request
-                    if (await BidOnAuction(bidRequest))
-                        Console.WriteLine("Bid Request Succeeded! \n");
-                }
-                
-                // Get list of pending API bids (bid status = 0 as example)
-                var bidList = await GetBids(10);
-
-                if (bidList.Count > 0)
-                {
-                    Console.WriteLine("\nFound Bids:\n");
-                    foreach (var bid in bidList)
-                    {
-                        Console.WriteLine("Requested={0}, Amount={1}, Actual={2}, Status={3}", bid.BidRequestedDate, bid.RequestedBidAmount, bid.ActualBidAmount, bid.Status);
-                    }
-                }
-                else
-                {
-                    Console.WriteLine("\nNo bids found.\n");
-                }
-
-                // Get Investments
-                var investments = await GetInvestments();
-
-                if (investments.Count > 0)
-                {
-                    Console.WriteLine("\n\nFound Investments: \n");
-
-                    foreach (Investment investment in investments)
-                    {
-                        Console.WriteLine("Amount={0}, Interest={1}, LateAmount={2}, UserName={3}",
-                            investment.Amount, investment.Interest, investment.LateAmountTotal, investment.UserName);
-                    }
-                }
-                else
-                {
-                    Console.WriteLine("\nNo Investments found.\n");
-                }
-
-                // Get Investments
-                var secondMarketItems = await GetSecondMarketItems(10);
-
-                if (secondMarketItems.Count > 0)
-                {
-                    Console.WriteLine("\n\nFound secondary market items: \n");
-
-                    foreach (SecondMarketItem item in secondMarketItems)
-                    {
-                        Console.WriteLine("Amount={0}, Price={1}, XIRR={2}, LateAmount={3}",
-                            item.Amount, item.Price, item.Xirr, item.LateAmountTotal);
-                    }
-                }
-                else
-                {
-                    Console.WriteLine("\nNo secondary market items found.\n");
-                }
+                bool success = await Authorize();
+                if (success)
+                    await ExecuteApiCalls();
             }
             catch (Exception ex)
             {
@@ -126,176 +79,160 @@ namespace Bondora.Api.Client.Sample.DotNet
 
             // Read line, so that the process is not closed
             Console.WriteLine("Press [Enter] to exit");
-            System.Console.ReadLine();
+            Console.ReadLine();
         }
 
-        #region Auctions
-        static async Task<IList<Auction>> GetAuctions(int pageSize = 10)
+        static async Task ExecuteApiCalls()
         {
-            using (var client = InitializeHttpClientWithAccessToken(ApiAccessToken))
+            // If no accessToken is received, cannot continue
+            if (string.IsNullOrEmpty(apiClient.AccessToken))
             {
-                HttpResponseMessage auctionListResponse = await client.GetAsync("api/v1/auctions?PageSize=" + pageSize);
-                if (auctionListResponse.IsSuccessStatusCode)
+                Console.WriteLine("No Access Token set. Cannot continue! \n");
+                return;
+            }
+
+            await ShowAuctions();
+
+            await ShowBids();
+
+            await ShowInvestements();
+
+            await ShowSecondMarketItems();
+        }
+
+        private static async Task ShowSecondMarketItems()
+        {
+            int pageNr = 1;
+            int pageSize = 1000;
+            int totalCount = -1;
+            var ratings = new List<string> { "EE", "FI" };
+            var secondMarketItems = new List<SecondMarketItem>();
+
+            while (totalCount < 0 || pageNr < (totalCount / pageSize))
+            {
+                var result = await apiClient.GetSecondMarketItems(pageNr, pageSize, -80, ratings);
+                if (result == null)
+                    break;
+
+                var items = result != null ? result.Payload : null;
+                totalCount = result.TotalCount;
+
+                items
+                    .Where(i => i.Price <= 3)
+                    .ToList()
+                    .ForEach(item => 
+                        {
+                            //Console.WriteLine(Newtonsoft.Json.JsonConvert.SerializeObject(item));
+                            Console.WriteLine("Id={4}, Amount={0}, Price={1}, XIRR={2}, LateAmount={3}, Discount={5}",
+                                item.Amount, item.Price, item.Xirr, item.LateAmountTotal, item.Id, item.DesiredDiscountRate);
+                        });
+
+                pageNr++;
+            }
+            /*
+            if (secondMarketItems != null && secondMarketItems.Count > 0)
+            {
+                Console.WriteLine("\n\nFound secondary market items: \n");
+
+                foreach (SecondMarketItem item in secondMarketItems)
                 {
-                    var listAuctionResult = await auctionListResponse.Content.ReadAsAsync<ApiResultAuctions>();
-                    
-                    return listAuctionResult.Payload;
-                }
-                else
-                {
-                    throw new Exception("Getting list of auctions failed, Reason : " + await auctionListResponse.Content.ReadAsStringAsync());
+                    Console.WriteLine("Id={4}\nAmount={0}, Price={1}, XIRR={2}, LateAmount={3}, Discount={5}",
+                        item.Amount, item.Price, item.Xirr, item.LateAmountTotal, item.Id, item.DesiredDiscountRate);
                 }
             }
-            return null;
-        }
-        #endregion
-
-        #region GetAuction
-        static async Task<Auction> GetAuction(Guid auctionId)
-        {
-            var auctionFound = new Auction();
-            using (var client = InitializeHttpClientWithAccessToken(ApiAccessToken))
+            else
             {
-                HttpResponseMessage auctionListResponse = await client.GetAsync("api/v1/auction/" + auctionId);
-                if (auctionListResponse.IsSuccessStatusCode)
-                {
-                    Console.WriteLine("\n\nAuction chosen: \n");
-                    var listAuctionResult = await auctionListResponse.Content.ReadAsAsync<ApiResultAuction>();
-                    auctionFound = listAuctionResult.Payload;
-                    Console.WriteLine("AuctionId={0}, Amount={1}, Rating={2}", auctionFound.AuctionId, auctionFound.AppliedAmount, auctionFound.Rating);
-                }
-                else
-                {
-                    throw new Exception("Getting auction failed, Reason : " + await auctionListResponse.Content.ReadAsStringAsync());
-                }
-                return auctionFound;
-            }
+                Console.WriteLine("\nNo secondary market items found.\n");
+            }*/
         }
-        #endregion
 
-        #region Bid On Auction
-        static async Task<bool> BidOnAuction(BidRequest bidRequest)
+        private static async Task ShowInvestements()
         {
-            using (var client = InitializeHttpClientWithAccessToken(ApiAccessToken))
+            // Get Investments
+            var investmentsResult = await apiClient.GetInvestments();
+            var investments = investmentsResult != null ? investmentsResult.Payload : null;
+
+            if (investments != null && investments.Count > 0)
             {
-                HttpResponseMessage bidResponse = await client.PostAsJsonAsync("api/v1/bid", bidRequest);
-                if (bidResponse.StatusCode != HttpStatusCode.Accepted)
-                {
-                    throw new Exception("Bid Request failed, Reason : " + await bidResponse.Content.ReadAsStringAsync());
-                }
-                return true;
-            }
-        }
-        #endregion
+                Console.WriteLine("\n\nFound Investments: \n");
 
-        #region Bids
-        static async Task<IList<BidSummary>> GetBids(int pageSize = 10, int? bidStatus = null, DateTime? startDate = null, DateTime? endDate = null, Guid? partyId = null)
-        {
-            var listBidResult = new ApiResultBids();
-
-            using (var client = InitializeHttpClientWithAccessToken(ApiAccessToken))
-            {
-                // Add GET parameters
-                var getParams = new NameValueCollection();
-                if (bidStatus.HasValue)
-                    getParams.Add("bidStatus", bidStatus.Value.ToString());
-                if (startDate.HasValue)
-                    getParams.Add("startDate", startDate.Value.ToString("u"));
-                if (endDate.HasValue)
-                    getParams.Add("endDate", endDate.Value.ToString("u"));
-                if (partyId.HasValue)
-                    getParams.Add("partyId", partyId.Value.ToString());
-
-                HttpResponseMessage bidListResponse = await client.GetAsync("api/v1/bids?PageSize=" + pageSize + "&" + GetQueryString(getParams));
-
-                if (bidListResponse.IsSuccessStatusCode)
+                foreach (Investment investment in investments)
                 {
-                    listBidResult = await bidListResponse.Content.ReadAsAsync<ApiResultBids>();
-                }
-                else
-                {
-                    throw new Exception("Getting list of bids failed, Reason : " + await bidListResponse.Content.ReadAsStringAsync());
-                }
-                return listBidResult.Payload;
-            }
-        }
-        #endregion
-
-        #region Investments
-        static async Task<IList<Investment>> GetInvestments(int pageSize = 10)
-        {
-            using (var client = InitializeHttpClientWithAccessToken(ApiAccessToken))
-            {
-                HttpResponseMessage auctionListResponse = await client.GetAsync("api/v1/account/investments?PageSize=" + pageSize);
-                if (auctionListResponse.IsSuccessStatusCode)
-                {
-                    var investmentsResult = await auctionListResponse.Content.ReadAsAsync<ApiResultInvestments>();
-                    
-                    return investmentsResult.Payload;
-                }
-                else
-                {
-                    throw new Exception("Getting list of investments failed, Reason : " + await auctionListResponse.Content.ReadAsStringAsync());
+                    Console.WriteLine("Amount={0}, Interest={1}, LateAmount={2}, UserName={3}",
+                        investment.Amount, investment.Interest, investment.LateAmountTotal, investment.UserName);
                 }
             }
-            return null;
-        }
-        #endregion
-
-        #region SeconadaryMarket
-        static async Task<IList<SecondMarketItem>> GetSecondMarketItems(int pageSize = 10)
-        {
-            using (var client = InitializeHttpClientWithAccessToken(ApiAccessToken))
+            else
             {
-                HttpResponseMessage response = await client.GetAsync("api/v1/secondarymarket?PageSize=" + pageSize);
-                if (response.IsSuccessStatusCode)
-                {
-                    var result = await response.Content.ReadAsAsync<ApiResultSecondMarket>();
+                Console.WriteLine("\nNo Investments found.\n");
+            }
+        }
 
-                    return result.Payload;
-                }
-                else
+        private static async Task ShowBids()
+        {
+            // Get list of pending API bids (bid status = 0 as example)
+            var bidsResult = await apiClient.GetBids(1, 100);
+            var bidList = bidsResult != null ? bidsResult.Payload : null;
+
+            if (bidList != null && bidList.Count > 0)
+            {
+                Console.WriteLine("\nFound Bids:\n");
+                foreach (var bid in bidList)
                 {
-                    throw new Exception("Getting list of secondary market items failed, Reason : " + await response.Content.ReadAsStringAsync());
+                    Console.WriteLine("Requested={0}, Amount={1}, Actual={2}, Status={3}", 
+                        bid.BidRequestedDate, bid.RequestedBidAmount, bid.ActualBidAmount, bid.StatusCode);
                 }
             }
-            return null;
+            else
+            {
+                Console.WriteLine("\nNo bids found.\n");
+            }
         }
-        #endregion
 
-        #region Initialization
-
-        private static HttpClient InitializeHttpClientWithBaseUri()
+        private static async Task ShowAuctions()
         {
-            var client = new HttpClient();
-            client.BaseAddress = new Uri(ApiBaseUri);
-            client.DefaultRequestHeaders.Accept.Clear();
-            client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-            return client;
-        }
+            // Get list auctions
+            var ratings = new List<string> { "AA", "A", "B" };
+            var auctionsResult = await apiClient.GetAuctions(1, 10, ratings);
+            var auctions = auctionsResult != null ? auctionsResult.Payload : null;
 
-        static HttpClient InitializeHttpClientWithAccessToken(string accessToken)
-        {
-            var client = InitializeHttpClientWithBaseUri();
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-            return client;
-        }
+            if (auctions == null)
+                return;
 
-        #endregion
+            if (auctions.Count > 0)
+            {
+                Console.WriteLine("\n\nFound Auctions: \n");
 
-        #region Utils
+                foreach (Auction auction in auctions)
+                {
+                    Console.WriteLine("AuctionId={0}, Amount={1}, Rating={2}", auction.AuctionId,
+                        auction.AppliedAmount, auction.Rating);
+                }
+            }
+            else
+            {
+                Console.WriteLine("\nNo auctions found.\n");
+            }
 
-        public static string GetQueryString(NameValueCollection source)
-        {
-            if (source.Count == 0)
-                return string.Empty;
+            // Check if there are any active auctions
+            if (auctions.Count > 0)
+            {
+                // Get first auction for bidding
+                int auctionIndex = new Random().Next(auctions.Count);
+                Guid auctionId = auctions[auctionIndex].AuctionId;
+                var auction = await apiClient.GetAuction(auctionId);
 
-            return String.Join("&", source.AllKeys
-                .SelectMany(key => source.GetValues(key)
-                    .Select(value => String.Format("{0}={1}", Uri.EscapeDataString(key), Uri.EscapeDataString(value))))
-                .ToArray());
-        }
+                if (auction != null)
+                    Console.WriteLine("AuctionId={0}, Amount={1}, Rating={2}", auction.AuctionId, auction.AppliedAmount, auction.Rating);
 
-        #endregion
+                // Construct 2 bid requests for this auction
+                var bids = new List<Bid> { new Bid(auction.AuctionId, 0), new Bid(auction.AuctionId, 0, 0) };
+                
+                // send the bid request
+                if (await apiClient.BidOnAuction(bids))
+                    Console.WriteLine("Bid Request Succeeded! \n");
+            }
+        } 
+
     }
 }

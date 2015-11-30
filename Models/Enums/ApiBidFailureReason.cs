@@ -20,6 +20,7 @@ namespace Bondora.Api.Client.Sample.DotNet.Models.Enums
         AuctionNotFound = 10,
         NotEnoughLoanAmountForBiddingAmount = 11,
         ApiUsageNotAllowed = 12,
-        Unknown = 13
+        AuctionIsCancelled = 13,
+        Unknown = 14
     }
 }

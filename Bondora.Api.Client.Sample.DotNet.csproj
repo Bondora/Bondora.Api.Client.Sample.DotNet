@@ -37,6 +37,7 @@
       <Private>True</Private>
     </Reference>
     <Reference Include="System" />
+    <Reference Include="System.Configuration" />
     <Reference Include="System.Core" />
     <Reference Include="System.Net.Http" />
     <Reference Include="System.Net.Http.Formatting, Version=5.2.3.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
@@ -50,27 +51,29 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="ApiClient.cs" />
+    <Compile Include="ApiConfig.cs" />
     <Compile Include="Models\ApiError.cs" />
     <Compile Include="Models\ApiResult.cs" />
-    <Compile Include="Models\ApiResultAuction.cs" />
-    <Compile Include="Models\ApiResultAuctions.cs" />
-    <Compile Include="Models\ApiResultAuthentication.cs" />
-    <Compile Include="Models\ApiResultBids.cs" />
-    <Compile Include="Models\ApiResultInvestments.cs" />
-    <Compile Include="Models\ApiResultSecondMarket.cs" />
-    <Compile Include="Models\Auction.cs" />
-    <Compile Include="Models\Bid.cs" />
-    <Compile Include="Models\BidRequest.cs" />
-    <Compile Include="Models\BidSummary.cs" />
+    <Compile Include="Models\Auction\ApiResultAuction.cs" />
+    <Compile Include="Models\Auction\ApiResultAuctions.cs" />
+    <Compile Include="Models\Bid\ApiResultBids.cs" />
+    <Compile Include="Models\Investment\ApiResultInvestments.cs" />
+    <Compile Include="Models\SecondMarket\ApiResultSecondMarket.cs" />
+    <Compile Include="Models\Auction\Auction.cs" />
+    <Compile Include="Models\Bid\Bid.cs" />
+    <Compile Include="Models\Bid\BidRequest.cs" />
+    <Compile Include="Models\Bid\BidSummary.cs" />
     <Compile Include="Models\Enums\ApiBidFailureReason.cs" />
     <Compile Include="Models\Enums\ApiBidStatusCode.cs" />
     <Compile Include="Models\Enums\AuctionIncomeVerificationStatus.cs" />
     <Compile Include="Models\Enums\AuctionPurpose.cs" />
     <Compile Include="Models\Enums\LoanDebtManagementEventType.cs" />
     <Compile Include="Models\Enums\Sex.cs" />
-    <Compile Include="Models\Investment.cs" />
-    <Compile Include="Models\SecondMarketItem.cs" />
-    <Compile Include="Models\UserOrganization.cs" />
+    <Compile Include="Models\Investment\Investment.cs" />
+    <Compile Include="Models\OAuth\AccessTokenRequest.cs" />
+    <Compile Include="Models\OAuth\AccessTokenResponse.cs" />
+    <Compile Include="Models\SecondMarket\SecondMarketItem.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

@@ -9,5 +9,9 @@ namespace Bondora.Api.Client.Sample.DotNet.Models
 {
     public class ApiResultBids : ApiResult<IList<BidSummary>>
     {
+        /// <summary>
+        /// Total number of investments found
+        /// </summary>
+        public int TotalCount { get; set; }
     }
 }

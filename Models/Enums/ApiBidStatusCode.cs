@@ -11,6 +11,7 @@ namespace Bondora.Api.Client.Sample.DotNet.Models.Enums
         Pending = 0,
         Open = 1,
         Successful = 2,
-        Failed = 3
+        Failed = 3,
+        Cancelled = 4
     }
 }
