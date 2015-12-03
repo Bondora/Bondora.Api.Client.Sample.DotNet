@@ -25,6 +25,11 @@ namespace Bondora.Api.Client.Sample.DotNet.Models.OAuth
         /// </summary>
         public int expires_in { get; set; }
 
+        /// <summary>
+        /// Token Valid until in Unix Time Stamp (Number of seconds since Unix Epoch on January 1st, 1970 at UTC).
+        /// </summary>
+        public long valid_until { get; set; }
+
         public TokenResult()
         {
             token_type = "bearer";

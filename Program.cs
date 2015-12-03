@@ -19,14 +19,14 @@ namespace Bondora.Api.Client.Sample.DotNet
 
         static async Task<bool> Authorize()
         {
-            Console.WriteLine("Do you want to use OAuth authorization?");
-            Console.WriteLine("Insert [Y] to use and just press [Enter] for none.");
+            Logger.LogInfo("Do you want to use OAuth authorization?");
+            Logger.LogInfo("Insert [Y] to use and just press [Enter] for none.");
             
             string answer = Console.ReadLine();
             if (string.IsNullOrWhiteSpace(answer) || 
                 !string.Equals(answer, "y", StringComparison.InvariantCultureIgnoreCase))
             {
-                Console.WriteLine("Skipping Authorization Flow.");
+                Logger.LogWarning("Skipping Authorization Flow.");
                 return true;
             }
 
@@ -37,31 +37,42 @@ namespace Bondora.Api.Client.Sample.DotNet
             // Open the default Brower with Uri
             System.Diagnostics.Process.Start(authUri);
 
-            Console.WriteLine("Copy the received Uri from the Authorization Flow.");
-            Console.WriteLine("Insert the received {code} value and press [Enter]:");
+            Logger.LogInfo("Copy the received Uri from the Authorization Flow.");
+            Logger.LogInfo("Insert the received {{code}} value and press [Enter]:");
 
             string code = Console.ReadLine();
 
             if (string.IsNullOrEmpty(code))
             {
-                Console.WriteLine("No input was given. Cannot continue with OAuth authorization.");
+                Logger.LogWarning("No input was given. Cannot continue with OAuth authorization.");
                 return false;
             }
 
-            string accessToken = await apiClient.GetAccessToken(code, ApiConfig.ClientId, ApiConfig.ClientSecret, ApiConfig.RedirectUri);
-            if (string.IsNullOrEmpty(accessToken))
+            var accessTokenResult = await apiClient.GetAccessTokenByCode(code, 
+                ApiConfig.ClientId, ApiConfig.ClientSecret, ApiConfig.RedirectUri);
+
+            if (accessTokenResult == null)
             {
-                Console.WriteLine("Getting the Access Token failed.");
+                Logger.LogError("Getting the Access Token failed.");
                 return false;
             }
             else
             {
-                Console.WriteLine("Received Access Token: {0}", accessToken);
+                Logger.LogSuccess("Received Access Token: {0}", accessTokenResult.access_token);
             }
 
-            apiClient.AccessToken = accessToken;
+            apiClient.AccessToken = accessTokenResult.access_token;
+            apiClient.RefreshToken = accessTokenResult.refresh_token;
+            apiClient.TokenValidUntilUtc = accessTokenResult.valid_until > 0
+                ? (DateTime?) GetDateTimeFromUnixTime(accessTokenResult.valid_until)
+                : null;
 
             return true;
+        }
+
+        private static DateTime GetDateTimeFromUnixTime(long unixTime)
+        {
+            return new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc) + TimeSpan.FromSeconds(unixTime);
         }
 
         static async Task RunAsync()
@@ -74,11 +85,11 @@ namespace Bondora.Api.Client.Sample.DotNet
             }
             catch (Exception ex)
             {
-                Console.WriteLine("Error occured: " + ex.Message);
+                Logger.LogError("Error occured: " + ex.Message);
             }
 
             // Read line, so that the process is not closed
-            Console.WriteLine("Press [Enter] to exit");
+            Logger.LogInfo("Press [Enter] to exit");
             Console.ReadLine();
         }
 
@@ -87,8 +98,16 @@ namespace Bondora.Api.Client.Sample.DotNet
             // If no accessToken is received, cannot continue
             if (string.IsNullOrEmpty(apiClient.AccessToken))
             {
-                Console.WriteLine("No Access Token set. Cannot continue! \n");
+                Logger.LogWarning("No Access Token set. Cannot continue!");
                 return;
+            }
+
+            if (apiClient.RefreshToken != null)
+            {
+                Logger.LogInfo("Refresh token is set. Trying to get new access token for the refresh token.");
+
+                if (!await GetNewAccessTokenFromRefreshToken())
+                    Logger.LogError("Could not get new access token for refresh token! \n");
             }
 
             await ShowAuctions();
@@ -98,52 +117,107 @@ namespace Bondora.Api.Client.Sample.DotNet
             await ShowInvestements();
 
             await ShowSecondMarketItems();
+
+            Logger.LogInfo("Trying to Revoke the access token.");
+            if (!await RevokeAccessToken())
+            {
+                Logger.LogError("Revoking the access token failed!");
+            }
+            else
+            {
+                Logger.LogSuccess("Successfully Revoke the access token.");
+            }
         }
 
+        private static async Task<bool> RevokeAccessToken()
+        {
+            return await apiClient.RevokeAccessToken();
+        }
+
+        private static async Task<bool> GetNewAccessTokenFromRefreshToken()
+        {
+            var result = await apiClient.GetAccessTokenByRefreshToken(apiClient.RefreshToken, 
+                ApiConfig.ClientId, ApiConfig.ClientSecret, ApiConfig.RedirectUri);
+
+            if (result == null)
+            {
+                Logger.LogError("Getting the Access Token failed.");
+                return false;
+            }
+            else
+            {
+                Logger.LogSuccess("Received New Access Token: {0}", result.access_token);
+            }
+
+            apiClient.AccessToken = result.access_token;
+            apiClient.TokenValidUntilUtc = result.valid_until > 0
+                ? (DateTime?)GetDateTimeFromUnixTime(result.valid_until)
+                : null;
+
+            return true;
+        }
+
+        private const bool FilterSecondaryMarketItems = false;
         private static async Task ShowSecondMarketItems()
         {
-            int pageNr = 1;
-            int pageSize = 1000;
-            int totalCount = -1;
-            var ratings = new List<string> { "EE", "FI" };
-            var secondMarketItems = new List<SecondMarketItem>();
+            List<SecondMarketItem> secondMarketItems = null;
 
-            while (totalCount < 0 || pageNr < (totalCount / pageSize))
+            if (FilterSecondaryMarketItems)
             {
-                var result = await apiClient.GetSecondMarketItems(pageNr, pageSize, -80, ratings);
-                if (result == null)
-                    break;
+                int pageNr = 1;
+                int pageSize = 1000;
+                int totalCount = -1;
+                var ratings = new List<string> {"EE", "FI"};
+                secondMarketItems = new List<SecondMarketItem>();
 
-                var items = result != null ? result.Payload : null;
-                totalCount = result.TotalCount;
+                while (totalCount < 0 || pageNr < (totalCount/pageSize))
+                {
+                    var result = await apiClient.GetSecondMarketItems(pageNr, pageSize, -80, ratings);
+                    if (result == null)
+                        break;
 
-                items
-                    .Where(i => i.Price <= 3)
-                    .ToList()
-                    .ForEach(item => 
+                    if (pageNr == 1)
+                        Logger.LogSuccess("\n\nFound Secondary Market items: \n");
+
+                    var items = result != null ? result.Payload : null;
+                    totalCount = result.TotalCount;
+
+                    items
+                        .Where(i => i.Price <= 3)
+                        .ToList()
+                        .ForEach(item =>
                         {
-                            //Console.WriteLine(Newtonsoft.Json.JsonConvert.SerializeObject(item));
-                            Console.WriteLine("Id={4}, Amount={0}, Price={1}, XIRR={2}, LateAmount={3}, Discount={5}",
-                                item.Amount, item.Price, item.Xirr, item.LateAmountTotal, item.Id, item.DesiredDiscountRate);
+                            //Logger.LogInfo(Newtonsoft.Json.JsonConvert.SerializeObject(item));
+                            Logger.LogInfo("Id={4}, Amount={0}, Price={1}, XIRR={2}, LateAmount={3}, Discount={5}",
+                                item.Amount, item.Price, item.Xirr, item.LateAmountTotal, item.Id,
+                                item.DesiredDiscountRate);
                         });
 
-                pageNr++;
-            }
-            /*
-            if (secondMarketItems != null && secondMarketItems.Count > 0)
-            {
-                Console.WriteLine("\n\nFound secondary market items: \n");
-
-                foreach (SecondMarketItem item in secondMarketItems)
-                {
-                    Console.WriteLine("Id={4}\nAmount={0}, Price={1}, XIRR={2}, LateAmount={3}, Discount={5}",
-                        item.Amount, item.Price, item.Xirr, item.LateAmountTotal, item.Id, item.DesiredDiscountRate);
+                    pageNr++;
                 }
             }
             else
             {
-                Console.WriteLine("\nNo secondary market items found.\n");
-            }*/
+                var result = await apiClient.GetSecondMarketItems(1, 10);
+
+                if (result != null && result.Payload != null)
+                    secondMarketItems = result.Payload.ToList();
+
+                if (secondMarketItems != null && secondMarketItems.Count > 0)
+                {
+                    Logger.LogSuccess("\n\nFound secondary market items: \n");
+
+                    foreach (SecondMarketItem item in secondMarketItems)
+                    {
+                        Logger.LogInfo("Id={4}\nAmount={0}, Price={1}, XIRR={2}, LateAmount={3}, Discount={5}",
+                            item.Amount, item.Price, item.Xirr, item.LateAmountTotal, item.Id, item.DesiredDiscountRate);
+                    }
+                }
+                else
+                {
+                    Logger.LogWarning("\nNo secondary market items found.\n");
+                }
+            }
         }
 
         private static async Task ShowInvestements()
@@ -154,17 +228,17 @@ namespace Bondora.Api.Client.Sample.DotNet
 
             if (investments != null && investments.Count > 0)
             {
-                Console.WriteLine("\n\nFound Investments: \n");
+                Logger.LogSuccess("\n\nFound Investments: \n");
 
                 foreach (Investment investment in investments)
                 {
-                    Console.WriteLine("Amount={0}, Interest={1}, LateAmount={2}, UserName={3}",
+                    Logger.LogInfo("Amount={0}, Interest={1}, LateAmount={2}, UserName={3}",
                         investment.Amount, investment.Interest, investment.LateAmountTotal, investment.UserName);
                 }
             }
             else
             {
-                Console.WriteLine("\nNo Investments found.\n");
+                Logger.LogWarning("\nNo Investments found.\n");
             }
         }
 
@@ -176,16 +250,16 @@ namespace Bondora.Api.Client.Sample.DotNet
 
             if (bidList != null && bidList.Count > 0)
             {
-                Console.WriteLine("\nFound Bids:\n");
+                Logger.LogSuccess("\nFound Bids:\n");
                 foreach (var bid in bidList)
                 {
-                    Console.WriteLine("Requested={0}, Amount={1}, Actual={2}, Status={3}", 
+                    Logger.LogInfo("Requested={0}, Amount={1}, Actual={2}, Status={3}", 
                         bid.BidRequestedDate, bid.RequestedBidAmount, bid.ActualBidAmount, bid.StatusCode);
                 }
             }
             else
             {
-                Console.WriteLine("\nNo bids found.\n");
+                Logger.LogWarning("\nNo bids found.\n");
             }
         }
 
@@ -201,17 +275,17 @@ namespace Bondora.Api.Client.Sample.DotNet
 
             if (auctions.Count > 0)
             {
-                Console.WriteLine("\n\nFound Auctions: \n");
+                Logger.LogSuccess("\n\nFound Auctions: \n");
 
                 foreach (Auction auction in auctions)
                 {
-                    Console.WriteLine("AuctionId={0}, Amount={1}, Rating={2}", auction.AuctionId,
+                    Logger.LogInfo("AuctionId={0}, Amount={1}, Rating={2}", auction.AuctionId,
                         auction.AppliedAmount, auction.Rating);
                 }
             }
             else
             {
-                Console.WriteLine("\nNo auctions found.\n");
+                Logger.LogWarning("\nNo auctions found.\n");
             }
 
             // Check if there are any active auctions
@@ -223,14 +297,16 @@ namespace Bondora.Api.Client.Sample.DotNet
                 var auction = await apiClient.GetAuction(auctionId);
 
                 if (auction != null)
-                    Console.WriteLine("AuctionId={0}, Amount={1}, Rating={2}", auction.AuctionId, auction.AppliedAmount, auction.Rating);
+                    Logger.LogInfo("AuctionId={0}, Amount={1}, Rating={2}", auction.AuctionId, auction.AppliedAmount, auction.Rating);
 
                 // Construct 2 bid requests for this auction
                 var bids = new List<Bid> { new Bid(auction.AuctionId, 0), new Bid(auction.AuctionId, 0, 0) };
                 
                 // send the bid request
                 if (await apiClient.BidOnAuction(bids))
-                    Console.WriteLine("Bid Request Succeeded! \n");
+                    Logger.LogSuccess("Bid Request Succeeded! \n");
+                else
+                    Logger.LogError("Bid Request Failed! \n");
             }
         } 
 

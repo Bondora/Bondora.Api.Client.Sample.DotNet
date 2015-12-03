@@ -29,6 +29,16 @@ namespace Bondora.Api.Client.Sample.DotNet.Models.OAuth
         /// </summary>
         public string client_secret { get; set; }
 
+        
+
+        /// <summary>
+        /// If set, must be the same as the provided in the OAuth Authorize step.
+        /// </summary>
+        public string redirect_uri { get; set; }
+    }
+
+    public class AccessTokenCodeRequest : AccessTokenRequest
+    {
         /// <summary>
         /// Code that was returned from the OAuth Authorize step.
         /// Used when requesting token for exchange of authorization code.
@@ -36,11 +46,14 @@ namespace Bondora.Api.Client.Sample.DotNet.Models.OAuth
         /// </summary>
         public string code { get; set; }
 
-        /// <summary>
-        /// If set, must be the same as the provided in the OAuth Authorize step.
-        /// </summary>
-        public string redirect_uri { get; set; }
+        public AccessTokenCodeRequest()
+        {
+            grant_type = "authorization_code";
+        }
+    }
 
+    public class AccessTokenRefreshTokenRequest : AccessTokenRequest
+    {
         /// <summary>
         /// Refresh token that was returned in token response for exchange of code.
         /// Used when requesting token for exchange of refresh token code.
@@ -48,5 +61,9 @@ namespace Bondora.Api.Client.Sample.DotNet.Models.OAuth
         /// </summary>
         public string refresh_token { get; set; }
 
+        public AccessTokenRefreshTokenRequest()
+        {
+            grant_type = "refresh_token";
+        }
     }
 }

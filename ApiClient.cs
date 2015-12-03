@@ -15,6 +15,8 @@ namespace Bondora.Api.Client.Sample.DotNet
     {
         public string BaseUri { get; private set; }
         public string AccessToken { get; set; }
+        public string RefreshToken { get; set; }
+        public DateTime? TokenValidUntilUtc { get; set; }
 
         public ApiClient(string baseUri)
         {
@@ -41,7 +43,7 @@ namespace Bondora.Api.Client.Sample.DotNet
                 }
                 else
                 {
-                    Console.WriteLine("Getting list of auctions failed, Reason: " + await auctionListResponse.Content.ReadAsStringAsync());
+                    Logger.LogError("Getting list of auctions failed, Reason: " + await auctionListResponse.Content.ReadAsStringAsync());
                 }
             }
             return null;
@@ -56,14 +58,13 @@ namespace Bondora.Api.Client.Sample.DotNet
                 HttpResponseMessage auctionListResponse = await client.GetAsync("api/v1/auction/" + auctionId);
                 if (auctionListResponse.IsSuccessStatusCode)
                 {
-                    Console.WriteLine("\n\nAuction chosen: \n");
                     var listAuctionResult = await auctionListResponse.Content.ReadAsAsync<ApiResultAuction>();
                     return listAuctionResult.Payload;
 
                 }
                 else
                 {
-                    Console.WriteLine("Getting auction failed, Reason : " + await auctionListResponse.Content.ReadAsStringAsync());
+                    Logger.LogError("Getting auction failed, Reason : " + await auctionListResponse.Content.ReadAsStringAsync());
                 }
                 return null;
             }
@@ -84,7 +85,7 @@ namespace Bondora.Api.Client.Sample.DotNet
                 }
                 else
                 {
-                    Console.WriteLine("Bid Request failed, Reason : " + await bidResponse.Content.ReadAsStringAsync());
+                    Logger.LogError("Bid Request failed, Reason : " + await bidResponse.Content.ReadAsStringAsync());
                 }
                 return false;
             }
@@ -116,7 +117,7 @@ namespace Bondora.Api.Client.Sample.DotNet
                 }
                 else
                 {
-                    Console.WriteLine("Getting list of bids failed, Reason : " + await bidListResponse.Content.ReadAsStringAsync());
+                    Logger.LogError("Getting list of bids failed, Reason : " + await bidListResponse.Content.ReadAsStringAsync());
                 }
                 return null;
             }
@@ -135,7 +136,7 @@ namespace Bondora.Api.Client.Sample.DotNet
                 }
                 else
                 {
-                    Console.WriteLine("Getting list of investments failed, Reason : " + await auctionListResponse.Content.ReadAsStringAsync());
+                    Logger.LogError("Getting list of investments failed, Reason : " + await auctionListResponse.Content.ReadAsStringAsync());
                 }
             }
             return null;
@@ -144,19 +145,24 @@ namespace Bondora.Api.Client.Sample.DotNet
 
         #region SecondaryMarket
         public async Task<ApiResultSecondMarket> GetSecondMarketItems(int pageNr = 1, int pageSize = 10,
-            decimal desiredDiscountRateMax = 100, List<string> countries = null)
+            decimal? desiredDiscountRateMax = null, List<string> countries = null)
         {
-            string queryParams = string.Empty;
-            if (countries != null && countries.Count > 0)
-            {
-                var getParams = new NameValueCollection();
-                countries.ForEach(country => getParams.Add("Countries", country));
-                queryParams = GetQueryString(getParams);
-            }
-
             using (var client = InitializeHttpClientWithAccessToken(AccessToken))
             {
-                HttpResponseMessage response = await client.GetAsync(string.Format("api/v1/secondarymarket?PageNr={0}&PageSize={1}&DesiredDiscountRateMax={2}&Countries={3}", pageNr, pageSize, desiredDiscountRateMax, queryParams));
+                var uri = string.Format("api/v1/secondarymarket?PageNr={0}&PageSize={1}", pageNr, pageSize);
+
+                if (desiredDiscountRateMax != null)
+                    uri = string.Format("{0}&DesiredDiscountRateMax={1}", uri, desiredDiscountRateMax);
+
+                if (countries != null && countries.Count > 0)
+                {
+                    var getParams = new NameValueCollection();
+                    countries.ForEach(country => getParams.Add("Countries", country));
+
+                    uri = string.Format("{0}&Countries={1}", uri, GetQueryString(getParams));
+                }
+
+                HttpResponseMessage response = await client.GetAsync(uri);
                 if (response.IsSuccessStatusCode)
                 {
                     return await response.Content.ReadAsAsync<ApiResultSecondMarket>();
@@ -173,12 +179,12 @@ namespace Bondora.Api.Client.Sample.DotNet
                     }
                     else
                     {
-                        Console.WriteLine("Too many requests made. Could not parse the 'Retry-After' header value '{0}'", retryAfter);
+                        Logger.LogWarning("Too many requests made. Could not parse the 'Retry-After' header value '{0}'", retryAfter);
                     }
                 }
                 else
                 {
-                    Console.WriteLine("Getting list of secondary market items failed, Reason: {0}", await response.Content.ReadAsStringAsync());
+                    Logger.LogError("Getting list of secondary market items failed, Reason: {0}", await response.Content.ReadAsStringAsync());
                 }
             }
             return null;
@@ -186,14 +192,13 @@ namespace Bondora.Api.Client.Sample.DotNet
         #endregion
 
         #region OAuth Access Token
-        public async Task<string> GetAccessToken(string code, string clientId, string clientSecret, string redirectUri)
+        public async Task<AccessTokenResult> GetAccessTokenByCode(string code, string clientId, string clientSecret, string redirectUri)
         {
-            var request = new AccessTokenRequest
+            var request = new AccessTokenCodeRequest
             {
                 code = code,
                 client_id = clientId,
                 client_secret = clientSecret,
-                grant_type = "authorization_code",
                 redirect_uri = redirectUri
             };
 
@@ -202,14 +207,56 @@ namespace Bondora.Api.Client.Sample.DotNet
                 HttpResponseMessage response = await client.PostAsJsonAsync("oauth/access_token", request);
                 if (response.IsSuccessStatusCode)
                 {
-                    var result = await response.Content.ReadAsAsync<AccessTokenResult>();
-                    return result != null ? result.access_token : null;
+                    return await response.Content.ReadAsAsync<AccessTokenResult>();
                 }
                 else
                 {
-                    Console.WriteLine("Access token request failed, Reason: " + await response.Content.ReadAsStringAsync());
+                    Logger.LogError("Access token request failed, Reason: " + await response.Content.ReadAsStringAsync());
                 }
                 return null;
+            }
+        }
+
+        public async Task<RefreshTokenResult> GetAccessTokenByRefreshToken(string refreshToken, string clientId, string clientSecret, string redirectUri)
+        {
+            var request = new AccessTokenRefreshTokenRequest
+            {
+                refresh_token = refreshToken,
+                client_id = clientId,
+                client_secret = clientSecret,
+                redirect_uri = redirectUri
+            };
+
+            using (var client = InitializeHttpClientWithBaseUri())
+            {
+                HttpResponseMessage response = await client.PostAsJsonAsync("oauth/access_token", request);
+                if (response.IsSuccessStatusCode)
+                {
+                    return await response.Content.ReadAsAsync<RefreshTokenResult>();
+                }
+                else
+                {
+                    Logger.LogError("Access token request failed, Reason: " + await response.Content.ReadAsStringAsync());
+                }
+                return null;
+            }
+        }
+
+        public async Task<bool> RevokeAccessToken()
+        {
+            using (var client = InitializeHttpClientWithAccessToken(AccessToken))
+            {
+                HttpResponseMessage response = await client.PostAsJsonAsync("oauth/access_token/revoke", new object());
+                if (response.IsSuccessStatusCode || response.StatusCode == HttpStatusCode.Accepted)
+                {
+                    var result = await response.Content.ReadAsAsync<ApiResult>();
+                    return result != null && result.Success;
+                }
+                else
+                {
+                    Logger.LogError("Access token revoke request failed, Reason: " + await response.Content.ReadAsStringAsync());
+                }
+                return false;
             }
         }
         #endregion
